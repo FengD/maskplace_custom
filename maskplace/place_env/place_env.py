@@ -1,6 +1,5 @@
 import math
 import gym
-from gym import spaces
 import numpy as np
 import sys
 sys.path.append("..")
@@ -26,7 +25,7 @@ class PlaceEnv(gym.Env):
         self.placed_num_macro = placed_num_macro
         self.num_net = placedb.net_cnt
         self.node_name_list = placedb.node_id_to_name
-        self.action_space = spaces.Discrete(self.grid * self.grid)
+        self.action_space = gym.spaces.Discrete(self.grid * self.grid)
         self.state = None
         self.net_min_max_ord = {}
         self.node_pos = {}
@@ -114,10 +113,20 @@ class PlaceEnv(gym.Env):
                 patches.Rectangle(
                     (x/self.grid, y/self.grid),   # (x,y)
                     size_x/self.grid,          # width
-                    size_y/self.grid, linewidth=1, edgecolor='k',
+                    size_y/self.grid, linewidth=0.5, edgecolor='k',
                 )
             )
-        fig1.savefig(file_path, dpi=90, bbox_inches='tight')
+
+            center_x = x + size_x / 2
+            center_y = y + size_y / 2
+
+            ax1.text(x / self.grid, y / self.grid, node_name, ha='center', va='center', fontsize=3, color='black')
+
+            for net_name in self.placedb.node_to_net_dict[node_name]:
+                pin_x = center_x + self.placedb.net_info[net_name]["nodes"][node_name]["x_offset"] / self.ratio
+                pin_y = center_y + self.placedb.net_info[net_name]["nodes"][node_name]["y_offset"] / self.ratio
+                ax1.scatter(pin_x / self.grid, pin_y / self.grid, color='black', s=0.1)  # add pin point
+        fig1.savefig(file_path, dpi=300, bbox_inches='tight')
         plt.close()
     # WireMask
     def get_net_img(self, is_next_next = False):
@@ -297,5 +306,3 @@ class PlaceEnv(gym.Env):
         mask[self.grid - next_x + 1:,:] = 1
         mask[:, self.grid - next_y + 1:] = 1
         return mask
-
-    

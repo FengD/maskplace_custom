@@ -10,6 +10,8 @@ import pickle
 sys.path.append('ariane')
 from ariane.read_info import get_netlist_info_dict
 # Macro dict (macro id -> name, x, y)
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 def read_node_file(fopen, benchmark):
     node_info = {}
@@ -249,6 +251,34 @@ class PlaceDB():
         print("net_cnt = {}".format(len(self.net_info)))
         print("max_height = {}".format(self.max_height))
         print("max_width = {}".format(self.max_width))
+
+    def save_fig(self, file_path):
+        fig1 = plt.figure()
+        ax1 = fig1.add_subplot(111, aspect='equal')
+        ax1.axes.xaxis.set_visible(False)
+        ax1.axes.yaxis.set_visible(False)
+        max_x = 0
+        max_y = 0
+        for node_name in self.node_info:
+            x = self.node_info[node_name]['x']
+            y = self.node_info[node_name]['y']
+            size_x = self.node_info[node_name]['raw_x']
+            size_y = self.node_info[node_name]['raw_y']
+            max_x = max(max_x, x + size_x)
+            max_y = max(max_y, y + size_y)
+            ax1.add_patch(
+                patches.Rectangle(
+                    (x, y),   # (x,y)
+                    size_x,          # width
+                    size_y, linewidth=1, edgecolor='k',
+                )
+            )
+            ax1.text(x, y, node_name, ha='center', va='center', fontsize=3, color='red')
+
+        ax1.set_xlim(-100, max_x + 100)
+        ax1.set_ylim(-100, max_y + 100)
+        fig1.savefig(file_path, dpi=300, bbox_inches='tight')
+        plt.close()
 
 
 if __name__ == "__main__":
