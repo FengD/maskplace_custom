@@ -11,7 +11,7 @@ import time
 class PlaceEnv(gym.Env):
 
     def __init__(self, placedb, placed_num_macro = None, grid = 224):
-        
+        self.seed_value = None
         # need to get GCN vector and CNN
         print("grid * grid", grid * grid)
         print("placedb.node_cnt", placedb.node_cnt)
@@ -38,8 +38,14 @@ class PlaceEnv(gym.Env):
         self.node_y_min = self.grid
         self.ratio = self.placedb.max_height / self.grid
         print("self.ratio = {:.2f}".format(self.ratio))
+
+    def seed(self, seed=None):
+        self.seed_value = seed
+        np.random.seed(seed)
     
     def reset(self):
+        if self.seed_value is not None:
+            np.random.seed(self.seed_value)
         self.num_macro_placed = 0
         num_macro = self.num_macro
         canvas = np.zeros((self.grid, self.grid))

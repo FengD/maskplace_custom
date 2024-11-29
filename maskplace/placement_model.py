@@ -74,14 +74,14 @@ class Actor(nn.Module):
         x = torch.where(mask + mask2 >=1.0, -1.0e10, x.double())
         x = self.softmax(x)
 
-        return x, cnn_res, gcn_res
+        return x, cnn_res
 
 
 class Critic(nn.Module):
     def __init__(self, cnn, gcn, cnn_coarse, res_net):
         super(Critic, self).__init__()
-        self.fc1 = nn.Linear(64, 64)
-        self.fc2 = nn.Linear(64, 64)
+        self.fc1 = nn.Linear(64, 64)  # 64, 512
+        self.fc2 = nn.Linear(64, 64)  # 512, 64
         self.state_value = nn.Linear(64, 1)
         self.pos_emb = nn.Embedding(1400, 64)
         self.cnn = cnn
@@ -91,3 +91,4 @@ class Critic(nn.Module):
         x2 = F.relu(self.fc2(x1))
         value = self.state_value(x2)
         return value
+    

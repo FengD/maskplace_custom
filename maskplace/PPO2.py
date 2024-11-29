@@ -12,7 +12,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.distributions import Normal
 from torch.distributions import Categorical
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 
@@ -44,7 +43,7 @@ parser.add_argument('--seed', type=int, default=42, metavar='N', help='random se
 parser.add_argument('--disable_tqdm', type=int, default=1)
 parser.add_argument('--lr', type=float, default=2.5e-3)
 parser.add_argument('--log-interval',type=int,default=10,metavar='N',help='interval between training status logs (default: 10)')
-parser.add_argument('--pnm', type=int, default=512)
+parser.add_argument('--pnm', type=int, default=1024)
 parser.add_argument('--benchmark', type=str, default='adaptec1')
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--is_test', action='store_true', default=False)
@@ -69,12 +68,38 @@ def seed_torch(seed=0):
     os.environ['PYTHONHASHSEED'] = str(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     torch.manual_seed(seed)
     env.seed(seed)
+    env.action_space.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-num_action = env.action_space.shape
+def save_placement(file_path, node_pos, ratio):
+    fwrite = open(file_path, 'w')
+    node_place = {}
+    for node_name in node_pos:
+
+        x, y,_ , _ = node_pos[node_name]
+        x = round(x * ratio + ratio) 
+        y = round(y * ratio + ratio)
+        node_place[node_name] = (x, y)
+    print("len node_place", len(node_place))
+    for node_name in placedb.node_info:
+        if node_name not in node_place:
+            continue
+        x, y = node_place[node_name]
+        fwrite.write('{}\t{}\t{}\t:\tN /FIXED\n'.format(node_name, x, y))
+    fwrite.close()
+    print(".pl has been saved to {}.".format(file_path))
+
+def check_mk_dir(folder_path):
+    if not os.path.exists(folder_path):
+        os.mkdir(folder_path)
+
+def localtime():
+    return time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
+
 seed_torch(args.seed)
 
 Transition = namedtuple('Transition',['state', 'action', 'reward', 'a_log_prob', 'next_state', 'reward_intrinsic'])
@@ -113,13 +138,42 @@ class PPO():
         self.actor_net.load_state_dict(checkpoint['actor_net_dict'])
         self.critic_net.load_state_dict(checkpoint['critic_net_dict'])
     
-    def select_action(self, state):
+    # def select_action(self, state):
+    #     state = torch.from_numpy(state).float().to(device).unsqueeze(0)
+    #     with torch.no_grad():
+    #         action_probs, _ = self.actor_net(state)
+    #     dist = Categorical(action_probs)
+    #     action = dist.sample()
+    #     action_log_prob = dist.log_prob(action)
+    #     return action.item(), action_log_prob.item()
+
+    def select_action(self, state, deterministic=False):
+        """
+        Select an action based on the current policy.
+        
+        Args:
+            state (numpy.ndarray): The current state.
+            deterministic (bool): If True, select the action with the highest probability.
+                                If False, sample from the probability distribution.
+        
+        Returns:
+            action (int): The selected action.
+            action_log_prob (float): The log probability of the selected action.
+        """
         state = torch.from_numpy(state).float().to(device).unsqueeze(0)
         with torch.no_grad():
-            action_probs, _, _ = self.actor_net(state)
-        dist = Categorical(action_probs)
-        action = dist.sample()
-        action_log_prob = dist.log_prob(action)
+            action_probs, _ = self.actor_net(state)
+        if deterministic:
+            action_probs = torch.clamp(action_probs, 1e-6, 1.0)
+            # Select the action with the highest probability
+            action = torch.argmax(action_probs, dim=-1)
+            action_log_prob = torch.log(action_probs[0, action])
+        else:
+            # Sample from the probability distribution
+            dist = Categorical(action_probs)
+            action = dist.sample()
+            action_log_prob = dist.log_prob(action)
+        print(action)
         return action.item(), action_log_prob.item()
 
     def get_value(self, state):
@@ -130,8 +184,7 @@ class PPO():
 
     def save_param(self, running_reward):
         strftime = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-        if not os.path.exists("save_models"):
-            os.mkdir("save_models")
+        check_mk_dir("save_models")
         torch.save({"actor_net_dict": self.actor_net.state_dict(),
                     "critic_net_dict": self.critic_net.state_dict()},
                     "./save_models/net_dict-{}-{}-".format(benchmark, placed_num_macro)+strftime+"{}".format(int(running_reward))+".pkl")
@@ -190,30 +243,7 @@ class PPO():
                 writer.add_scalar('value_loss', value_loss, self.training_step)
 
 
-def save_placement(file_path, node_pos, ratio):
-    fwrite = open(file_path, 'w')
-    node_place = {}
-    for node_name in node_pos:
 
-        x, y,_ , _ = node_pos[node_name]
-        x = round(x * ratio + ratio) 
-        y = round(y * ratio + ratio)
-        node_place[node_name] = (x, y)
-    print("len node_place", len(node_place))
-    for node_name in placedb.node_info:
-        if node_name not in node_place:
-            continue
-        x, y = node_place[node_name]
-        fwrite.write('{}\t{}\t{}\t:\tN /FIXED\n'.format(node_name, x, y))
-    fwrite.close()
-    print(".pl has been saved to {}.".format(file_path))
-
-def check_mk_dir(folder_path):
-    if not os.path.exists(folder_path):
-        os.mkdir(folder_path)
-
-def localtime():
-    return time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()) 
 
 def main():
     agent = PPO()
@@ -231,24 +261,17 @@ def main():
     
     best_reward = running_reward
     if args.is_test:
+        torch.inference_mode()
         if not load_model_path:
             print("no model path given for test model")
             return
-        score = 0
         state = env.reset()
+        
         done = False
-        counter = 0
         while done is False:
-            action, action_log_prob = agent.select_action(state)
-            next_state, reward, done, info = env.step(action)
-            assert next_state.shape == (config.num_state, )
-            score += reward
-            state = next_state
-            counter = counter + 1
-
-        print("score = {} counter = {}".format(score, counter))
-        torch.inference_mode()
-        print("save node_pos")
+            action, action_log_prob = agent.select_action(state, True)
+            state, reward, done, info = env.step(action)
+        
         hpwl, cost = comp_res(placedb, env.node_pos, env.ratio)
         print("hpwl = {:.2f}\tcost = {:.2f}".format(hpwl, cost))
 
@@ -271,7 +294,7 @@ def main():
                 action, action_log_prob = agent.select_action(state)
             
                 next_state, reward, done, info = env.step(action)
-                assert next_state.shape == (config.num_state, )
+                # assert next_state.shape == (config.num_state, )
                 reward_intrinsic = 0
                 trans = Transition(state_tmp, action, reward / 200.0, action_log_prob, next_state, reward_intrinsic)
                 if agent.store_transition(trans):                
@@ -294,8 +317,7 @@ def main():
                     pl_file_path = "gg_place_new/{}-{}-{}.pl".format(benchmark, strftime_now, int(raw_score)) 
                     save_placement(pl_file_path, env.node_pos, env.ratio)
                     if args.save_fig:
-                        if not os.path.exists("figures"):
-                            os.mkdir("figures")
+                        check_mk_dir("figures")
                         env.save_fig("./figures/{}-{}-{}.png".format(benchmark, strftime_now,int(raw_score)))
                         print("save_figure: figures/{}-{}-{}.png".format(benchmark, strftime_now,int(raw_score)))
                     try:
@@ -315,7 +337,7 @@ def main():
             if running_reward > -100:
                 print("Solved! Moving average score is now {}!".format(running_reward))
                 env.close()
-                agent.save_param()
+                agent.save_param(running_reward)
                 break
 
         

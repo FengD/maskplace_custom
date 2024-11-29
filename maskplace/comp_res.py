@@ -1,6 +1,5 @@
 from place_db import PlaceDB
 from prim import prim_real
-import pickle
 
 def comp_res(placedb, node_pos, ratio):
 
@@ -8,9 +7,9 @@ def comp_res(placedb, node_pos, ratio):
     cost = 0.0
     for net_name in placedb.net_info:
         max_x = 0.0
-        min_x = placedb.max_height * 1.1
+        min_x = placedb.max_height * 1.1  # (why 1.1?)
         max_y = 0.0
-        min_y = placedb.max_height * 1.1
+        min_y = placedb.max_height * 1.1  # (why 1.1?)
         for node_name in placedb.net_info[net_name]["nodes"]:
             if node_name not in node_pos:
                 continue
