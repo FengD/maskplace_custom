@@ -173,7 +173,6 @@ class PPO():
             dist = Categorical(action_probs)
             action = dist.sample()
             action_log_prob = dist.log_prob(action)
-        print(action)
         return action.item(), action_log_prob.item()
 
     def get_value(self, state):
@@ -216,7 +215,7 @@ class PPO():
                 disable = args.disable_tqdm):
                 self.training_step +=1
                 
-                action_probs, _, _ = self.actor_net(state[index].to(device))
+                action_probs, _ = self.actor_net(state[index].to(device))
                 dist = Categorical(action_probs)
                 action_log_prob = dist.log_prob(action[index].squeeze())
                 ratio = torch.exp(action_log_prob - old_action_log_prob[index].squeeze())
@@ -255,7 +254,7 @@ def main():
     log_file_name = "logs/log_"+ benchmark + "_" + localtime() + "_seed_"+ str(args.seed) + "_pnm_" + str(args.pnm) + ".csv"
     fwrite = open(log_file_name, "w")
 
-    load_model_path = "save_models/net_dict-adaptec1-512-2024-11-26-16-43-27-16255.pkl"
+    load_model_path = ""
     if load_model_path:
        agent.load_param(load_model_path)
     
@@ -283,7 +282,7 @@ def main():
         check_mk_dir("figures")
         env.save_fig("./figures/{}-{}-{}-{}.png".format(benchmark, strftime_now, int(hpwl), int(cost)))
     else:
-        for i_epoch in tqdm(range(1000)):
+        for i_epoch in tqdm(range(2000)):
             score = 0
             raw_score = 0
             state = env.reset()
@@ -309,7 +308,17 @@ def main():
             running_reward = running_reward * 0.9 + score * 0.1
             # print("score = {}, raw_score = {}".format(score, raw_score))
 
-            if running_reward > best_reward:
+            best_reward_coef = 1.0
+            if i_epoch < 500:
+                best_reward_coef = 1.2
+            elif i_epoch < 1000:
+                best_reward_coef = 1.1
+            elif i_epoch < 1500:
+                best_reward_coef = 1.05
+            else:
+                best_reward_coef = 1.0
+
+            if running_reward > best_reward * best_reward_coef:
                 best_reward = running_reward
                 if i_epoch >= 100:
                     agent.save_param(running_reward)
@@ -329,7 +338,7 @@ def main():
                         assert False
             
             training_records.append(TrainingRecord(i_epoch, running_reward))
-            if i_epoch % 10 ==0:
+            if i_epoch % 20 ==0:
                 print("Epoch {}, Moving average score is: {:.2f} ".format(i_epoch, running_reward))
                 fwrite.write("{},{},{:.2f},{}\n".format(i_epoch, score, running_reward, agent.training_step))
                 fwrite.flush()

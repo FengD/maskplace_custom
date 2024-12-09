@@ -30,11 +30,11 @@ class MyCNNCoarse(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(8, 4, 3, stride=2, padding=1, output_padding = 1), #28
             nn.ReLU(),
-            nn.ConvTranspose2d(4, 2, 3, stride=2, padding=1, output_padding = 1), #56
+            nn.ConvTranspose2d(4, 2, 3, stride=3, padding=0, output_padding = 0), #84
             nn.ReLU(),
-            nn.ConvTranspose2d(2, 1, 3, stride=2, padding=1, output_padding = 1), #112
+            nn.ConvTranspose2d(2, 1, 3, stride=1, padding=1, output_padding = 0), #84
             nn.ReLU(),
-            nn.ConvTranspose2d(1, 1, 3, stride=2, padding=1, output_padding = 1), #224
+            nn.ConvTranspose2d(1, 1, 3, stride=1, padding=1, output_padding = 0), #84
         )
     def forward(self, x):
         x = self.cnn(x).reshape(-1, 16, 7, 7)
